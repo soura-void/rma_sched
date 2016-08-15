@@ -55,7 +55,10 @@ void task::schedFirst()
 	condU = size * (pow(2.0, (1.0 / size)) - 1.0);
 	cout << condU << endl;
 	if (U <= condU)
+	{
 		cout << "The current taskset is scheduable" << endl;
+		exit(0);
+	}
 	else
 		cout << "The current taskset might not be scheduable" << endl;
 
@@ -98,8 +101,9 @@ void task::schedSecond()
 	sortTask();
 
 	//reference table
-	//pi		The task for which the w(t) ias being calculated
-	//
+	//pi			The task for which the w(t) ias being calculated
+	//ci			The execution time of the task in consideration
+	//timeStore		This is a vector storing the scheduling points
 
 
 	//calculate the wi(t) for every task
@@ -137,12 +141,7 @@ int main()
 {
 	task T;
 	T.getInput();
-	T.sched();
-	return 0;
-}
-
-int _tmain(int argc, _TCHAR* argv[])
-{
+	T.schedFirst();
 	return 0;
 }
 
