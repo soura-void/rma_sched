@@ -54,14 +54,20 @@ void task::schedFirst()
 	cout << U << endl;
 	condU = size * (pow(2.0, (1.0 / size)) - 1.0);
 	cout << condU << endl;
+	cin.ignore();
 	if (U <= condU)
 	{
 		cout << "The current taskset is scheduable" << endl;
-		exit(0);
+		cin.ignore();
+		
 	}
 	else
+	{
 		cout << "The current taskset might not be scheduable" << endl;
-
+		schedSecond();
+		cin.ignore();
+		exit(0);
+	}
 }
 
 void task::sortTask()
@@ -99,6 +105,8 @@ void task::schedSecond()
 {
 	//sort - use a heap or a priority queue
 	sortTask();
+	cout << "Task set sorted" << endl;
+	cin.ignore();
 
 	//reference table
 	//pi			The task for which the w(t) ias being calculated
@@ -114,7 +122,7 @@ void task::schedSecond()
 		float T = *pi;
 		vector<float>::iterator ti;
 		int flag = 0;
-
+		cout << "Considering task #" << T
 		//Now this two information are required for the calculation of the scheduling points.
 		//These scheduling points are valid for the calculation of the time demand function of the task in question
 		calcTime(T, pi);
@@ -131,10 +139,15 @@ void task::schedSecond()
 			if (value > *time)
 			{
 				cout << "Unscheduable task: (" << (*pi) << ", " << (*ci) << ")" << endl;
+				cin.ignore();
 				exit(0);
+				cin.ignore();
 			}
 		}
 	}
+
+	cout << "Scheduable Task set" << endl;
+	cin.ignore();
 }
 
 int main()
@@ -142,6 +155,7 @@ int main()
 	task T;
 	T.getInput();
 	T.schedFirst();
+	cin.ignore();
 	return 0;
 }
 
