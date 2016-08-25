@@ -51,9 +51,9 @@ void task::schedFirst()
 	{
 		U = U + ((*ci) / (*pi));
 	}
-	cout << U << endl;
+	cout << "Calculated Utilization: " << U << endl;
 	condU = size * (pow(2.0, (1.0 / size)) - 1.0);
-	cout << condU << endl;
+	cout << "Limiting Utilization: " << condU << endl;
 	cin.ignore();
 	if (U <= condU)
 	{
@@ -99,6 +99,7 @@ void task::calcTime(float Ti, vector<float>::iterator j)
 			timeStore.push_back((float)(i*(*pi)));
 		}
 	}
+	timeStore.push_back(*pi);
 }
 
 void task::schedSecond()
@@ -116,32 +117,39 @@ void task::schedSecond()
 
 	//calculate the wi(t) for every task
 	vector<float>::iterator pi, ci;
+
 	//This is the outermost loop. This decides which tak is being currently visited
 	for (pi = p.begin(), ci=c.begin(); pi != p.end(); ++pi, ++ci)
 	{
+		//this T is the time of the current viewed task. This will be passed to calcTime
 		float T = *pi;
 		vector<float>::iterator ti;
 		int flag = 0;
-		cout << "Considering task #" << T
-		//Now this two information are required for the calculation of the scheduling points.
+
+		//cout << "Considering task #" << T;
+		//Now this two information (The current time and the iterator pointing to the current task)
+		//are required for the calculation of the scheduling points.
 		//These scheduling points are valid for the calculation of the time demand function of the task in question
+		timeStore.clear();
 		calcTime(T, pi);
+
 
 		//Now this loop traverses the scheduling points and at every iteration sees whether the condition is satisfied or not
 		for (vector<float>::iterator time = timeStore.begin(); time != timeStore.end(); ++time)
 		{
+			//cout << "\n\t" << "Time: " << (*time) << endl;
 			vector<float>::iterator cj, pj;
-			value = 0.0;
+			value = *ci;
 			for (pj = p.begin(), cj = c.begin(); pj != pi; ++pj, ++cj)
 			{
-				value += (*cj)*ceil((*time) / (*pi));
+				value += (*cj)*ceil((*time) / (*pj));
 			}
+			//cout << "\n\t" << "Value: " << (value) << endl;
 			if (value > *time)
 			{
 				cout << "Unscheduable task: (" << (*pi) << ", " << (*ci) << ")" << endl;
 				cin.ignore();
 				exit(0);
-				cin.ignore();
 			}
 		}
 	}
