@@ -11,13 +11,14 @@ class task
 	vector<float> c, p, t, wt, timeStore;
 	float U, condU;
 	double value;
-	int size;
+	int size, count;
 public:
 	task()
 	{
 		U = 0.0;
 		condU = 0.0;
 		value = 0.0;
+		count = 0;
 	}
 	void calcTime(float Ti, vector<float>::iterator j);
 	void getInput();
@@ -89,6 +90,8 @@ void task::sortTask()
 	}
 }
 
+
+// This can be parallelized az the loop is dependant on the loop element in itself
 void task::calcTime(float Ti, vector<float>::iterator j)
 {
 	vector<float>::iterator pi;
@@ -135,22 +138,24 @@ void task::schedSecond()
 
 
 		//Now this loop traverses the scheduling points and at every iteration sees whether the condition is satisfied or not
-		for (vector<float>::iterator time = timeStore.begin(); time != timeStore.end(); ++time)
+		for (auto time = timeStore.rbegin(); time != timeStore.rend(); ++time)
 		{
-			//cout << "\n\t" << "Time: " << (*time) << endl;
-			vector<float>::iterator cj, pj;
+
 			value = *ci;
-			for (pj = p.begin(), cj = c.begin(); pj != pi; ++pj, ++cj)
+			count++;
+			for (auto pj = pi, cj = ci; pj != p.begin(); --pj, --cj)
 			{
 				value += (*cj)*ceil((*time) / (*pj));
+				if (value > *time)
+				{
+					cout << "The task set is not scheduable" << endl;
+					cout << "Unscheduable task: (" << (*pi) << ", " << (*ci) << ")" << endl;
+					cout << "Number of iterations: " << count;
+					cin.ignore();
+					exit(0);
+				}
 			}
 			//cout << "\n\t" << "Value: " << (value) << endl;
-			if (value > *time)
-			{
-				cout << "Unscheduable task: (" << (*pi) << ", " << (*ci) << ")" << endl;
-				cin.ignore();
-				exit(0);
-			}
 		}
 	}
 
