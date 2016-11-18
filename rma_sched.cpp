@@ -6,18 +6,29 @@
 #include<sstream>
 #include<fstream>
 #include<ctime>
+#include<map>
 #define MAX_PERIOD 1000
 #define BUFF_SIZE 10
+#define NO_OF_PROCESSORS 1
 using namespace std;
 
 
 class task
 {
-	vector<float> c, p, t, wt, timeStore;
+	vector<float> *c, *p, t, wt, *timeStore, tempC, tempP; //tempC and tempP for taking input, rest are for computation
 	float condU;
 	long double U;
 	double value, ratio;
 	int size, count, m;
+	void calcTime(float Ti, int m, int processor);
+	void takeInput();
+	void getInput();
+	void summ();
+	void schedFirst(int processor);
+	void schedSecond(int processor);
+	void sortTask(int processor);
+	void divide();
+
 public:
 	task()
 	{
@@ -26,14 +37,31 @@ public:
 		value = 0.0;
 		count = 0;
 		ratio = 9999999.0;
+		c = new vector<float>[NO_OF_PROCESSORS];
+		p = new vector<float>[NO_OF_PROCESSORS];
+		timeStore = new vector<float>[NO_OF_PROCESSORS];
 	}
-	void calcTime(float Ti, int m);
-	void takeInput();
-	void getInput();
-	void summ();
-	void schedFirst();
-	void schedSecond();
-	void sortTask();
+	void startITDA()
+	{
+		//divide
+		takeInput();
+		divide();
+		//call schedFirst on each
+		count = 0;
+		for (int i = 0; i < NO_OF_PROCESSORS; i++)
+		{
+			schedFirst(i);
+		}
+		cout << "\n\n-------------------\n Total iterations: " << count;
+		cin.ignore();
+		exit(0);
+	}
+	void debug()
+	{
+		takeInput();
+		divide();
+	}
+	
 };
 
 
@@ -50,7 +78,7 @@ void task::takeInput()
 	ss << buff1;
 	ss.getline(buff2, 10, ',');
 	size = atoi(buff2);
-	cout << "Reading task-set of size: " << size << endl;
+	cout << "Reading task-set of size: " << size << "\n-----------------------------" << endl;
 	for (int i = 0; i<size; i++)
 	{
 		fin.getline(buff1, BUFF_SIZE);
@@ -58,24 +86,21 @@ void task::takeInput()
 
 		sts.getline(buff2, 10, ',');
 		u = atoi(buff2);
-		c.push_back(u);
+		tempC.push_back(u);
 
 		sts.getline(buff2, 10, ',');
 		u = atoi(buff2);
-		p.push_back(u);
+		tempP.push_back(u);
 	}
-	cout << "Completed reading task-set\n";
+	cout << "Completed reading task-set\n\n";
 
-	p.pop_back();
-	c.pop_back();
-	for (int i : p)
-	{
-		cout << i << " ";
-	}
-	size = p.size();
-	cin.ignore();
+	tempP.pop_back();
+	tempC.pop_back();
+	size = tempP.size();
 }
 
+
+/*
 void task::getInput()
 {
 	float c, p, t;
@@ -91,45 +116,81 @@ void task::getInput()
 		(this->t).push_back(t);
 	}
 }
+*/
 
 
-void task::schedFirst()
+//start divinding the task set into NO_OF_PROCESSORS
+//on each call schedFirst, sortTask, calcTime, schedSecond
+
+void task::divide()
+{
+	vector<double> p_exec(NO_OF_PROCESSORS, 0.0);
+	int ele = 0;
+	double tempU = 0.0;
+	//work on tempP and allocate one by one
+	for (auto i = tempP.begin(), j = tempC.begin(); i != tempP.end(); ++i, ++j)
+	{
+		tempU = *j / *i;
+		ele = distance(begin(p_exec), (min_element(begin(p_exec), end(p_exec)))); //finds the least loaded processor
+		p[ele].push_back(*i);
+		c[ele].push_back(*j);
+		p_exec[ele] += tempU;
+		
+	}
+
+	//Uncomment to view which tasks are being allocated to which processor
+	/*
+	for (int i = 0; i < NO_OF_PROCESSORS;i++)
+	{
+		for (auto it : p[i])
+		{
+			cout << it << "  ";
+		}
+		cout << "-------" << p_exec[i];
+		cout << endl;
+	}
+	*/
+}
+//After divide, modify the other functions so that they work on the input that they take as parameter.
+//This can be achieved by giving them the input only what processor they are required to operate on. 
+
+
+
+void task::schedFirst(int processor)
 {
 	vector<float>::iterator pi, ci, ti;
-	cout << "Reaches here";
-	for (pi = p.begin(), ci = c.begin(); pi != p.end(); ++pi, ++ci)
+	U = 0.0;
+	for (pi = p[processor].begin(), ci = c[processor].begin(); pi != p[processor].end(); ++pi, ++ci)
 	{
 		U = U + ( (*ci) / (*pi) );
-		cout << "Ci: " << *ci << "Pi: " << *pi << "U: " << U << endl;
 	}
-	cout << "Reaches here too";
-	cout << "Calculated Utilization: " << U << endl;
-	condU = size * (pow(2.0, (1.0 / size)) - 1.0);
-	cout << "Limiting Utilization: " << condU << endl;
-	cin.ignore();
+	//cout << "Scheduability bound\n---------------------------\n";
+	//cout << "Calculated Utilization: " << U << endl;
+	//condU = size * (pow(2.0, (1.0 / size)) - 1.0);
+	//cout << "Limiting Utilization: " << condU << endl;
+	//cin.ignore();
 	if (U <= condU)
 	{
-		cout << "The current taskset is scheduable" << endl;
+		cout << "The current taskset is scheduable at processor#" << processor << endl;
 		cin.ignore();
 		
 	}
 	else
 	{
-		cout << "The current taskset might not be scheduable" << endl;
-		schedSecond();
+		//cout << "The current taskset might/might not be scheduable.\n" << endl;
+		schedSecond(processor);
 		cin.ignore();
-		exit(0);
 	}
 }
 
-void task::sortTask()
+void task::sortTask(int processor)
 {
 	vector<float>::iterator pi, ci, temp;
 	float t;
-	for (pi = p.begin(); pi != p.end(); ++pi)
+	for (pi = p[processor].begin(); pi != p[processor].end(); ++pi)
 	{
 		float min = *pi;
-		for (temp = pi; temp != p.end(); temp++)
+		for (temp = pi; temp != p[processor].end(); temp++)
 		{
 			if (*temp < min)
 			{
@@ -143,28 +204,29 @@ void task::sortTask()
 
 
 // This can be parallelized az the loop is dependant on the loop element in itself
-void task::calcTime(float Ti, int m)
+void task::calcTime(float Ti, int m, int processor)
 {
 	int i;
 	for (i = 0; i <= m; i++)
 	{
-		for (int k = 1; k <= floor(Ti / (p[i])); k++)
+		for (int k = 1; k <= floor(Ti / (p[processor][i])); k++)
 		{
-			timeStore.push_back((float)(k*(p[i])));
+			timeStore[processor].push_back((float)(k*(p[processor][i])));
 		}
 	}
-	timeStore.push_back(p[i]);
+	timeStore[processor].push_back(p[processor][i]);
 }
 
 
-void task::schedSecond()
+void task::schedSecond(int processor)
 {
+	cout << "Time Demand Analysis for processor#" << processor << "\n---------------------------\n";
 	fstream fout;
 	fout.open("plot_this.txt", fstream::out);
 	//sort - use a heap or a priority queue
-	sortTask();
+	sortTask(processor);
 	cout << "Task set sorted" << endl;
-	cin.ignore();
+	//cin.ignore();
 
 	//reference table
 	//pi			The task for which the w(t) ias being calculated
@@ -177,42 +239,53 @@ void task::schedSecond()
 	//This is the outermost loop. This decides which tak is being currently visited
 	//Now the decision has to be made so as to reduce the iteration. This for loop cannot proceed serially.
 	float volatile b_time = 0;
-	m = (int)(size / 2);
-	while (ratio > 1)
+	int size = p[processor].size();
+	m = ((int)(size / 2)) % (size-1);
+	int o_count = 0;
+	int flag = 1;
+	double max_ratio = 0.0;
+	while (ratio > 1 && o_count < size)
 	{
-		auto *pi = &p[m];
-		auto *ci = &c[m];
+		o_count++;
+		auto *pi = &(p[processor][m]);
+		auto *ci = &(c[processor][m]);
 		//this T is the time of the current viewed task. This will be passed to calcTime
 		float T = *pi;
 		vector<float>::iterator ti;
-		int flag = 0;
+		int flag = 1;
 
 		//cout << "Considering task #" << T << endl;
 		//cin.ignore();
 		//Now this two information (The current time and the iterator pointing to the current task)
 		//are required for the calculation of the scheduling points.
 		//These scheduling points are valid for the calculation of the time demand function of the task in question
-		timeStore.clear();
-		calcTime(T, m);
+		timeStore[processor].clear();
+		calcTime(T, m, processor);
 
 		float volatile chk_time = 0;
 		float volatile chk_tm = 0;
-		//Now this loop traverses the scheduling points and at every iteration sees whether the condition is satisfied or not
-		for (auto time = timeStore.rbegin(); time != timeStore.rend(); ++time)
-		{
 
+		//Now this loop traverses the scheduling points and at every iteration sees whether the condition is satisfied or not
+		for (auto time = timeStore[processor].rbegin(); time != timeStore[processor].rend(); ++time)
+		{
 			value = *ci;
 			count++;
 			for (int pj = m, cj = m; pj >= 0; --pj, --cj)
 			{
-				value += (c[cj])*ceil((*time) / (p[pj]));
+				if (flag)
+				{
+					max_ratio = (c[processor][0])*ceil((*time) / (p[processor][0])) / *time;
+					max_ratio = 1/max_ratio;
+					//cout << "Max ratio: " << max_ratio;
+					flag = 0;
+				}
+				value += (c[processor][cj])*ceil((*time) / (p[processor][pj]));
 				if (value > *time)
 				{
-					cout << "The task set is not scheduable" << endl;
+					cout << "The task set is not scheduable at processor#" << processor << endl;
 					cout << "Unscheduable task: (" << (*ci) << ", " << (*pi) << ")" << endl;
-					cout << "Number of iterations: " << count;
-					cin.ignore();
-					exit(0);
+					//cout << "Number of iterations: " << count;
+					return;
 				}
 			}
 			chk_time = value;
@@ -220,16 +293,16 @@ void task::schedSecond()
 			//cout << "\n\t" << "Value: " << (value) << endl;
 		}
 		ratio = chk_tm / chk_time;
-		m = m + floor(ratio);
-		cout << "(" << (*ci) << "," << (*pi) << "): " << chk_time << " | time: " << chk_tm << "| Ratio: " << chk_tm / chk_time;
+		//Calculates the new value that is the next task in the sorted list.
+		m = m + floor(ratio*size/max_ratio);
+		//cout <<"| Ratio: " << chk_tm / chk_time << "| m: " << m;
 		//fout << chk_tm / chk_time << endl;
-		//cin.ignore();
 	}
 
-	cout << "Scheduable Task set" << endl;
-	cout << "Number of iterations: " << count;
-	cin.ignore();
+	//cout << "Scheduable Task set" << endl;
+	//cout << "Number of iterations: " << count;
 }
+
 
 //This function generates random task sets
 void gen(float ds)
@@ -238,7 +311,7 @@ void gen(float ds)
 	srand(std::time(0));
 	fout.open("task_set.txt");
 	fout << (int)ds << endl;
-	float chk = (1.0 / ds);
+	float chk = (1.0*NO_OF_PROCESSORS / ds);
 	for (int i = 1; i < (int)ds; i++)
 	{
 		float x = 0;
@@ -264,9 +337,8 @@ int main()
 {
 	gen(100);
 	task T;
-	T.takeInput();
-	//T.getInput();
-	T.schedFirst();
+	//T.debug();
+	T.startITDA();
 	cin.ignore();
 	return 0;
 }
