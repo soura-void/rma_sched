@@ -9,7 +9,8 @@
 #include<map>
 #define MAX_PERIOD 1000
 #define BUFF_SIZE 10
-#define NO_OF_PROCESSORS 1
+#define NO_OF_PROCESSORS 4
+#define NO_OF_TASKS 200
 using namespace std;
 
 
@@ -19,17 +20,34 @@ class task
 	float condU;
 	long double U;
 	double value, ratio;
-	int size, count, m;
 	void calcTime(float Ti, int m, int processor);
-	void takeInput();
-	void getInput();
 	void summ();
-	void schedFirst(int processor);
 	void schedSecond(int processor);
 	void sortTask(int processor);
-	void divide();
 
 public:
+	void schedFirst(int processor);
+	int size, count, m;
+	void divide();
+	void takeInput();
+	void getInput();
+	void gen(float ds);
+	void clear()
+	{
+		U = 0.0;
+		condU = 0.0;
+		value = 0.0;
+		count = 0;
+		ratio = 9999999.0;
+		delete(c);
+		delete(p);
+		tempP.clear();
+		tempC.clear();
+		delete(timeStore);
+		c = new vector<float>[NO_OF_PROCESSORS];
+		p = new vector<float>[NO_OF_PROCESSORS];
+		timeStore = new vector<float>[NO_OF_PROCESSORS];
+	}
 	task()
 	{
 		U = 0.0;
@@ -41,21 +59,7 @@ public:
 		p = new vector<float>[NO_OF_PROCESSORS];
 		timeStore = new vector<float>[NO_OF_PROCESSORS];
 	}
-	void startITDA()
-	{
-		//divide
-		takeInput();
-		divide();
-		//call schedFirst on each
-		count = 0;
-		for (int i = 0; i < NO_OF_PROCESSORS; i++)
-		{
-			schedFirst(i);
-		}
-		cout << "\n\n-------------------\n Total iterations: " << count;
-		cin.ignore();
-		exit(0);
-	}
+	
 	void debug()
 	{
 		takeInput();
@@ -64,6 +68,33 @@ public:
 	
 };
 
+void startITDA()
+{
+	fstream fout;
+	string filename = "output" + to_string(NO_OF_PROCESSORS) + ".txt";
+	fout.open(filename, fstream::out);
+	task *T;
+	for (int j = 10; j <= NO_OF_TASKS; j += 10)
+	{
+		T = new task();
+		//divide
+		(*T).gen(j);
+		(*T).takeInput();
+		(*T).divide();
+		//call schedFirst on each
+		(*T).count = 0;
+		for (int i = 0; i < NO_OF_PROCESSORS; i++)
+		{
+			(*T).schedFirst(i);
+		}
+		cout << "\n\n-------------------\n Total iterations for " << j << ": " << (*T).count << "\n\n";
+		fout << j << "," << (*T).count << endl;
+		free(T);
+	}
+	cin.ignore();
+	fout.close();
+	exit(0);
+}
 
 void task::takeInput()
 {
@@ -172,14 +203,14 @@ void task::schedFirst(int processor)
 	if (U <= condU)
 	{
 		cout << "The current taskset is scheduable at processor#" << processor << endl;
-		cin.ignore();
+		//cin.ignore();
 		
 	}
 	else
 	{
 		//cout << "The current taskset might/might not be scheduable.\n" << endl;
 		schedSecond(processor);
-		cin.ignore();
+		//cin.ignore();
 	}
 }
 
@@ -305,7 +336,7 @@ void task::schedSecond(int processor)
 
 
 //This function generates random task sets
-void gen(float ds)
+void task::gen(float ds)
 {
 	ofstream fout;
 	srand(std::time(0));
@@ -335,10 +366,9 @@ void gen(float ds)
 
 int main()
 {
-	gen(100);
 	task T;
 	//T.debug();
-	T.startITDA();
+	startITDA();
 	cin.ignore();
 	return 0;
 }
