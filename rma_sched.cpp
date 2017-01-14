@@ -7,39 +7,51 @@
 #include<fstream>
 #include<ctime>
 #include<map>
+#include<omp.h>
+#include<chrono>
+
 #define MAX_PERIOD 1000
 #define BUFF_SIZE 10
 #define NO_OF_PROCESSORS 4
-#define NO_OF_TASKS 200
+#define NO_OF_TASKS 100
+#define CHUNKSIZE 1
 using namespace std;
 
 
 class task
 {
 	vector<float> *c, *p, t, wt, *timeStore, tempC, tempP; //tempC and tempP for taking input, rest are for computation
-	float condU;
-	long double U;
-	double value, ratio;
+	float *condU;
+	long double *U;
+	double *value, *ratio;
 	void calcTime(float Ti, int m, int processor);
 	void summ();
-	void schedSecond(int processor);
+	int schedSecond(int processor);
 	void sortTask(int processor);
 
 public:
-	void schedFirst(int processor);
-	int size, count, m;
+	int schedFirst(int processor);
+	int size, *count, m;
 	void divide();
 	void takeInput();
 	void getInput();
 	void gen(float ds);
+	int load(int x);
 	void clear()
 	{
-		U = 0.0;
-		condU = 0.0;
-		value = 0.0;
-		count = 0;
-		ratio = 9999999.0;
+		
+		for (register int init = 0; init < NO_OF_PROCESSORS; init++)
+		{
+			U[init] = 0.0;
+			condU[init] = 0.0;
+			value[init] = 0.0;
+			ratio[init] = 9999999.0;
+		}
 		delete(c);
+		delete(p);
+		delete(U);
+		delete(condU);
+		delete(value);
 		delete(p);
 		tempP.clear();
 		tempC.clear();
@@ -47,14 +59,26 @@ public:
 		c = new vector<float>[NO_OF_PROCESSORS];
 		p = new vector<float>[NO_OF_PROCESSORS];
 		timeStore = new vector<float>[NO_OF_PROCESSORS];
+		U = new long double[NO_OF_PROCESSORS];
+		condU = new float[NO_OF_PROCESSORS];
+		value = new double[NO_OF_PROCESSORS];
+		ratio = new double[NO_OF_PROCESSORS];
 	}
 	task()
 	{
-		U = 0.0;
-		condU = 0.0;
-		value = 0.0;
-		count = 0;
-		ratio = 9999999.0;
+		U = new long double[NO_OF_PROCESSORS];
+		condU = new float[NO_OF_PROCESSORS];
+		value = new double[NO_OF_PROCESSORS];
+		ratio = new double[NO_OF_PROCESSORS];
+		count = new int[NO_OF_PROCESSORS];
+		for (register int init = 0; init < NO_OF_PROCESSORS; init++)
+		{
+			U[init] = 0.0;
+			condU[init] = 0.0;
+			value[init] = 0.0;
+			ratio[init] = 9999999.0;
+			count[init] = 0;
+		}
 		c = new vector<float>[NO_OF_PROCESSORS];
 		p = new vector<float>[NO_OF_PROCESSORS];
 		timeStore = new vector<float>[NO_OF_PROCESSORS];
@@ -74,26 +98,82 @@ void startITDA()
 	string filename = "output" + to_string(NO_OF_PROCESSORS) + ".txt";
 	fout.open(filename, fstream::out);
 	task *T;
-	for (int j = 10; j <= NO_OF_TASKS; j += 10)
+	for (int j = NO_OF_TASKS; j <= NO_OF_TASKS; j += 10)
 	{
 		T = new task();
 		//divide
 		(*T).gen(j);
 		(*T).takeInput();
 		(*T).divide();
+
 		//call schedFirst on each
-		(*T).count = 0;
-		for (int i = 0; i < NO_OF_PROCESSORS; i++)
+
+		fout << j << ",";
+		int load_count[NO_OF_PROCESSORS] = { 0 };
+		int i;
+
+		auto begin = std::chrono::high_resolution_clock::now();
+		
+#pragma omp parallel shared(T, load_count)
 		{
-			(*T).schedFirst(i);
+		#pragma omp sections
+		{
+		#pragma omp section
+		{
+		(*T).count[0] = 0;
+		load_count[0] = (*T).schedFirst(0);
 		}
-		cout << "\n\n-------------------\n Total iterations for " << j << ": " << (*T).count << "\n\n";
-		fout << j << "," << (*T).count << endl;
+
+		#pragma omp section
+		{
+		(*T).count[1] = 0;
+		load_count[1] = (*T).schedFirst(1);
+		}
+
+		#pragma omp section
+		{
+		(*T).count[2] = 0;
+		load_count[2] = (*T).schedFirst(2);
+		}
+
+		#pragma omp section
+		{
+		(*T).count[3] = 0;
+		load_count[3] = (*T).schedFirst(3);
+		}
+		}
+	}
+		
+		/*
+			for (i = 0; i < NO_OF_PROCESSORS; i++)
+			{
+				(*T).count[i] = 0;
+				load_count[i] = (*T).schedFirst(i);
+			}
+			*/
+		auto end = std::chrono::high_resolution_clock::now();
+		std::cout << "Time taken: " << std::chrono::duration_cast<std::chrono::milliseconds>(end - begin).count() << "ms" << std::endl;
+
+		cout << "\n\n-------------------\n Total iterations for " << j << ": ";
+		int sum = 0;
+		for (int s = 0; s < NO_OF_PROCESSORS; s++)
+		{
+			sum += (*T).count[s];
+			fout << load_count[s] << ",";
+		}
+		cout << sum << endl;
+		fout << sum << ",";
+		fout << endl;
 		free(T);
 	}
 	cin.ignore();
 	fout.close();
 	exit(0);
+}
+
+int task::load(int x)
+{
+	return p[x].size();
 }
 
 void task::takeInput()
@@ -158,6 +238,7 @@ void task::divide()
 	vector<double> p_exec(NO_OF_PROCESSORS, 0.0);
 	int ele = 0;
 	double tempU = 0.0;
+	
 	//work on tempP and allocate one by one
 	for (auto i = tempP.begin(), j = tempC.begin(); i != tempP.end(); ++i, ++j)
 	{
@@ -187,20 +268,22 @@ void task::divide()
 
 
 
-void task::schedFirst(int processor)
+int task::schedFirst(int processor)
 {
 	vector<float>::iterator pi, ci, ti;
-	U = 0.0;
+	U[processor] = 0.0;
 	for (pi = p[processor].begin(), ci = c[processor].begin(); pi != p[processor].end(); ++pi, ++ci)
 	{
-		U = U + ( (*ci) / (*pi) );
+		U[processor] = U[processor] + ((*ci) / (*pi));
 	}
 	//cout << "Scheduability bound\n---------------------------\n";
 	//cout << "Calculated Utilization: " << U << endl;
-	//condU = size * (pow(2.0, (1.0 / size)) - 1.0);
+	int size = p[processor].size();
+	condU[processor] = size * (pow(2.0, (1.0 / size)) - 1.0);
 	//cout << "Limiting Utilization: " << condU << endl;
 	//cin.ignore();
-	if (U <= condU)
+	int load_count = 0;
+	if (U[processor] <= condU[processor])
 	{
 		cout << "The current taskset is scheduable at processor#" << processor << endl;
 		//cin.ignore();
@@ -209,7 +292,8 @@ void task::schedFirst(int processor)
 	else
 	{
 		//cout << "The current taskset might/might not be scheduable.\n" << endl;
-		schedSecond(processor);
+		load_count = schedSecond(processor);
+		return load_count;
 		//cin.ignore();
 	}
 }
@@ -249,16 +333,16 @@ void task::calcTime(float Ti, int m, int processor)
 }
 
 
-void task::schedSecond(int processor)
+int task::schedSecond(int processor)
 {
-	cout << "Time Demand Analysis for processor#" << processor << "\n---------------------------\n";
+	cout << "\n\nTime Demand Analysis for processor#" << processor << "\n---------------------------\n";
 	fstream fout;
 	fout.open("plot_this.txt", fstream::out);
 	//sort - use a heap or a priority queue
 	sortTask(processor);
-	cout << "Task set sorted" << endl;
+	//cout << "Task set sorted" << endl;
 	//cin.ignore();
-
+	int load_count = 0;
 	//reference table
 	//pi			The task for which the w(t) ias being calculated
 	//ci			The execution time of the task in consideration
@@ -275,7 +359,7 @@ void task::schedSecond(int processor)
 	int o_count = 0;
 	int flag = 1;
 	double max_ratio = 0.0;
-	while (ratio > 1 && o_count < size)
+	while (ratio[processor] > 1 && o_count < size)
 	{
 		o_count++;
 		auto *pi = &(p[processor][m]);
@@ -299,8 +383,8 @@ void task::schedSecond(int processor)
 		//Now this loop traverses the scheduling points and at every iteration sees whether the condition is satisfied or not
 		for (auto time = timeStore[processor].rbegin(); time != timeStore[processor].rend(); ++time)
 		{
-			value = *ci;
-			count++;
+			value[processor] = *ci;
+			count[processor]++;
 			for (int pj = m, cj = m; pj >= 0; --pj, --cj)
 			{
 				if (flag)
@@ -310,28 +394,31 @@ void task::schedSecond(int processor)
 					//cout << "Max ratio: " << max_ratio;
 					flag = 0;
 				}
-				value += (c[processor][cj])*ceil((*time) / (p[processor][pj]));
-				if (value > *time)
+				value[processor] += (c[processor][cj])*ceil((*time) / (p[processor][pj]));
+				if (value[processor] > *time)
 				{
-					cout << "The task set is not scheduable at processor#" << processor << endl;
-					cout << "Unscheduable task: (" << (*ci) << ", " << (*pi) << ")" << endl;
+					cout << "The task set is not scheduable at processor #" << processor << endl;
+					cout << "Unscheduable task: (" << (*ci) << ", " << (*pi) << ")  -  Task number #" << m << endl;
+					cout << "Total tasks assigned to processor: " << load_count-1 << "\n\n";
 					//cout << "Number of iterations: " << count;
-					return;
+					return load_count;
 				}
 			}
-			chk_time = value;
+			chk_time = value[processor];
 			chk_tm = *time;
 			//cout << "\n\t" << "Value: " << (value) << endl;
 		}
-		ratio = chk_tm / chk_time;
+		ratio[processor] = chk_tm / chk_time;
 		//Calculates the new value that is the next task in the sorted list.
-		m = m + floor(ratio*size/max_ratio);
+		m = m + floor(ratio[processor] * size / max_ratio);
+		load_count = m;
 		//cout <<"| Ratio: " << chk_tm / chk_time << "| m: " << m;
 		//fout << chk_tm / chk_time << endl;
 	}
 
 	//cout << "Scheduable Task set" << endl;
 	//cout << "Number of iterations: " << count;
+	return load_count;
 }
 
 
@@ -366,7 +453,7 @@ void task::gen(float ds)
 
 int main()
 {
-	task T;
+	//task T;
 	//T.debug();
 	startITDA();
 	cin.ignore();
