@@ -1,4 +1,3 @@
-#include "stdafx.h"
 #include<iostream>
 #include<vector>
 #include<cmath>
@@ -13,23 +12,26 @@
 #define MAX_PERIOD 1000
 #define BUFF_SIZE 10
 #define NO_OF_PROCESSORS 4
-#define NO_OF_TASKS 100
+#define NO_OF_THREADS 4
+#define NO_OF_TASKS glb_size
+#define NO_OF_START_TASKS glb_size
 #define CHUNKSIZE 1
 using namespace std;
 
+int glb_size = 0;
 
 class task
 {
 	vector<float> *c, *p, t, wt, *timeStore, tempC, tempP; //tempC and tempP for taking input, rest are for computation
-	float *condU;
-	long double *U;
+	float *condU; //For checking bound 1
+	long double *U; //Utilization
 	double *value, *ratio;
 	void calcTime(float Ti, int m, int processor);
 	void summ();
 	int schedSecond(int processor);
 	void sortTask(int processor);
-
 public:
+	int load_c[NO_OF_PROCESSORS];
 	int schedFirst(int processor);
 	int size, *count, m;
 	void divide();
@@ -37,9 +39,28 @@ public:
 	void getInput();
 	void gen(float ds);
 	int load(int x);
+	void print()
+	{
+		cout << "\t\t\t\tTask allocation to processors\n\t\t------------------------------------------------------------------\n\t\t";
+		for (int i = 0; i < NO_OF_PROCESSORS; i++)
+		{
+			cout << "Processor #"<< i << "  |  ";
+		}
+		cout << endl << "\t\t";
+		for (int i = 0; i < NO_OF_PROCESSORS; i++)
+		{
+			cout << "----------------";
+		}
+		cout << "--" << endl << "\t\t";
+		for (int i = 0; i < NO_OF_PROCESSORS; i++)
+		{
+			cout << "      " << load_c[i] << "     \t";
+		}
+		cout << "\n\t\t------------------------------------------------------------------" << endl;
+	}
 	void clear()
 	{
-		
+
 		for (register int init = 0; init < NO_OF_PROCESSORS; init++)
 		{
 			U[init] = 0.0;
@@ -83,87 +104,131 @@ public:
 		p = new vector<float>[NO_OF_PROCESSORS];
 		timeStore = new vector<float>[NO_OF_PROCESSORS];
 	}
-	
+
 	void debug()
 	{
 		takeInput();
 		divide();
 	}
-	
+
 };
 
 void startITDA()
 {
-	fstream fout;
+
+	cout << "\n\t\t\t\tPARAMETERS" << endl << "\t\t------------------------------------" << endl;
+	cout << "\t\tNO OF PROCESSORS\t" << NO_OF_PROCESSORS << endl;
+	cout << "\t\tNO OF TASKS     \t" << NO_OF_TASKS << endl;
+	omp_set_num_threads(NO_OF_THREADS);
+	cout << "\t\tTHREADS IN OPENMP\t" << NO_OF_THREADS << endl << "\t\t------------------------------------" << endl << endl;
+	fstream fout, fperf;
 	string filename = "output" + to_string(NO_OF_PROCESSORS) + ".txt";
 	fout.open(filename, fstream::out);
+	filename = "perf" + to_string(NO_OF_PROCESSORS) + ".txt";
+	fperf.open(filename, fstream::out);
 	task *T;
-	for (int j = NO_OF_TASKS; j <= NO_OF_TASKS; j += 10)
+	for (int j = NO_OF_START_TASKS; j <= NO_OF_TASKS; j += 10)
 	{
 		T = new task();
 		//divide
+		//cout << "\nGenerating sample task set" << endl;
+		//auto begin = std::chrono::high_resolution_clock::now();
 		(*T).gen(j);
+		//auto end = std::chrono::high_resolution_clock::now();
+		//std::cout << "Completed generation; Time taken: " << std::chrono::duration_cast<std::chrono::milliseconds>(end - begin).count() << "ms" << std::endl;
+		cout << "\t\tPress Enter to proceed" << endl;
+		cin.ignore(); cin.ignore();
 		(*T).takeInput();
 		(*T).divide();
 
 		//call schedFirst on each
-
 		fout << j << ",";
 		int load_count[NO_OF_PROCESSORS] = { 0 };
 		int i;
-
+		//To calculate the exact time taken
+		long int performance = 0;
 		auto begin = std::chrono::high_resolution_clock::now();
-		
+
+		//start of the parallel section
+		//Find a way to make this dynamic
 #pragma omp parallel shared(T, load_count)
 		{
-		#pragma omp sections
+#pragma omp sections
 		{
-		#pragma omp section
+			//Each section is executed by a separate thread in parallel
+#pragma omp section
 		{
-		(*T).count[0] = 0;
-		load_count[0] = (*T).schedFirst(0);
+			(*T).count[0] = 0;
+			load_count[0] = (*T).schedFirst(0);
 		}
 
-		#pragma omp section
+#pragma omp section
 		{
-		(*T).count[1] = 0;
-		load_count[1] = (*T).schedFirst(1);
+			(*T).count[1] = 0;
+			load_count[1] = (*T).schedFirst(1);
 		}
 
-		#pragma omp section
+#pragma omp section
 		{
-		(*T).count[2] = 0;
-		load_count[2] = (*T).schedFirst(2);
+			(*T).count[2] = 0;
+			load_count[2] = (*T).schedFirst(2);
 		}
 
-		#pragma omp section
+#pragma omp section
 		{
-		(*T).count[3] = 0;
-		load_count[3] = (*T).schedFirst(3);
+			(*T).count[3] = 0;
+			load_count[3] = (*T).schedFirst(3);
 		}
 		}
-	}
-		
+		}
+		(*T).print();
 		/*
-			for (i = 0; i < NO_OF_PROCESSORS; i++)
-			{
-				(*T).count[i] = 0;
-				load_count[i] = (*T).schedFirst(i);
-			}
-			*/
+		for (i = 0; i < NO_OF_PROCESSORS; i++)
+		{
+		(*T).count[i] = 0;
+		load_count[i] = (*T).schedFirst(i);
+		}
+		*/
 		auto end = std::chrono::high_resolution_clock::now();
-		std::cout << "Time taken: " << std::chrono::duration_cast<std::chrono::milliseconds>(end - begin).count() << "ms" << std::endl;
-
-		cout << "\n\n-------------------\n Total iterations for " << j << ": ";
+		std::cout << "\n\t\tTotal Time taken for parallel execution:\t" << std::chrono::duration_cast<std::chrono::milliseconds>(end - begin).count() << "ms" << std::endl;
+		performance = std::chrono::duration_cast<std::chrono::milliseconds>(end - begin).count();
+		
 		int sum = 0;
 		for (int s = 0; s < NO_OF_PROCESSORS; s++)
 		{
 			sum += (*T).count[s];
 			fout << load_count[s] << ",";
 		}
-		cout << sum << endl;
+		
 		fout << sum << ",";
 		fout << endl;
+		free(T);
+
+		//Serial part starts from here.
+		//BLocking the output from displaying
+		cout.setstate(ios_base::failbit);
+		//Recreate the freed object
+		T = new task();
+		//No need to generate any more tasks as the one generated by the parallel part can be used
+		//(*T).gen(j);
+		(*T).takeInput();
+		(*T).divide();
+		//reset values
+		load_count[NO_OF_PROCESSORS] = { 0 };
+
+		begin = std::chrono::high_resolution_clock::now();
+		for (i = 0; i < NO_OF_PROCESSORS; i++)
+		{
+			(*T).count[i] = 0;
+			load_count[i] = (*T).schedFirst(i);
+		}
+		end = std::chrono::high_resolution_clock::now();
+		//Enable output
+		cout.clear();
+		std::cout << "\t\tTotal Time taken for serial execution:    \t" << std::chrono::duration_cast<std::chrono::milliseconds>(end - begin).count() << "ms" << std::endl;
+		cout << "\n\n\t\t-----------------------------------\n\t\tTotal iterations for " << j << " tasks:\t\t";
+		cout << sum << endl;
+		cout << "\t\tTime improvement ratio: \t\t" << (double)(std::chrono::duration_cast<std::chrono::milliseconds>(end - begin).count()) / performance << endl;
 		free(T);
 	}
 	cin.ignore();
@@ -189,7 +254,6 @@ void task::takeInput()
 	ss << buff1;
 	ss.getline(buff2, 10, ',');
 	size = atoi(buff2);
-	cout << "Reading task-set of size: " << size << "\n-----------------------------" << endl;
 	for (int i = 0; i<size; i++)
 	{
 		fin.getline(buff1, BUFF_SIZE);
@@ -203,7 +267,6 @@ void task::takeInput()
 		u = atoi(buff2);
 		tempP.push_back(u);
 	}
-	cout << "Completed reading task-set\n\n";
 
 	tempP.pop_back();
 	tempC.pop_back();
@@ -214,18 +277,18 @@ void task::takeInput()
 /*
 void task::getInput()
 {
-	float c, p, t;
-	cout << "Enter the number of tasks in the task set: ";
-	cin >> size;
+float c, p, t;
+cout << "Enter the number of tasks in the task set: ";
+cin >> size;
 
-	for (int i = 0; i<size; i++)
-	{
-		cout << "Enter the \'c\',\'p\',\'t\' for task #" << i << ": ";
-		cin >> c >> p >> t;
-		(this->c).push_back(c);
-		(this->p).push_back(p);
-		(this->t).push_back(t);
-	}
+for (int i = 0; i<size; i++)
+{
+cout << "Enter the \'c\',\'p\',\'t\' for task #" << i << ": ";
+cin >> c >> p >> t;
+(this->c).push_back(c);
+(this->p).push_back(p);
+(this->t).push_back(t);
+}
 }
 */
 
@@ -238,7 +301,7 @@ void task::divide()
 	vector<double> p_exec(NO_OF_PROCESSORS, 0.0);
 	int ele = 0;
 	double tempU = 0.0;
-	
+
 	//work on tempP and allocate one by one
 	for (auto i = tempP.begin(), j = tempC.begin(); i != tempP.end(); ++i, ++j)
 	{
@@ -247,19 +310,19 @@ void task::divide()
 		p[ele].push_back(*i);
 		c[ele].push_back(*j);
 		p_exec[ele] += tempU;
-		
+
 	}
 
 	//Uncomment to view which tasks are being allocated to which processor
 	/*
 	for (int i = 0; i < NO_OF_PROCESSORS;i++)
 	{
-		for (auto it : p[i])
-		{
-			cout << it << "  ";
-		}
-		cout << "-------" << p_exec[i];
-		cout << endl;
+	for (auto it : p[i])
+	{
+	cout << it << "  ";
+	}
+	cout << "-------" << p_exec[i];
+	cout << endl;
 	}
 	*/
 }
@@ -287,7 +350,7 @@ int task::schedFirst(int processor)
 	{
 		cout << "The current taskset is scheduable at processor#" << processor << endl;
 		//cin.ignore();
-		
+
 	}
 	else
 	{
@@ -335,7 +398,7 @@ void task::calcTime(float Ti, int m, int processor)
 
 int task::schedSecond(int processor)
 {
-	cout << "\n\nTime Demand Analysis for processor#" << processor << "\n---------------------------\n";
+	//cout << "\n\nAt processor#" << processor << "\n-----------------------------------\n";
 	fstream fout;
 	fout.open("plot_this.txt", fstream::out);
 	//sort - use a heap or a priority queue
@@ -355,7 +418,7 @@ int task::schedSecond(int processor)
 	//Now the decision has to be made so as to reduce the iteration. This for loop cannot proceed serially.
 	float volatile b_time = 0;
 	int size = p[processor].size();
-	m = ((int)(size / 2)) % (size-1);
+	m = ((int)(size / 2)) % (size - 1);
 	int o_count = 0;
 	int flag = 1;
 	double max_ratio = 0.0;
@@ -385,21 +448,23 @@ int task::schedSecond(int processor)
 		{
 			value[processor] = *ci;
 			count[processor]++;
+			load_count = m;
 			for (int pj = m, cj = m; pj >= 0; --pj, --cj)
 			{
 				if (flag)
 				{
 					max_ratio = (c[processor][0])*ceil((*time) / (p[processor][0])) / *time;
-					max_ratio = 1/max_ratio;
+					max_ratio = 1 / max_ratio;
 					//cout << "Max ratio: " << max_ratio;
 					flag = 0;
 				}
 				value[processor] += (c[processor][cj])*ceil((*time) / (p[processor][pj]));
 				if (value[processor] > *time)
 				{
-					cout << "The task set is not scheduable at processor #" << processor << endl;
-					cout << "Unscheduable task: (" << (*ci) << ", " << (*pi) << ")  -  Task number #" << m << endl;
-					cout << "Total tasks assigned to processor: " << load_count-1 << "\n\n";
+					//cout << "The task set is not scheduable at processor #" << processor << endl;
+					//cout << "Unscheduable task: (" << (*ci) << ", " << (*pi) << ")  -  Task number #" << m << endl;
+					//cout << "Total tasks assigned to processor #" << processor << ": " << load_count - 1 << "\n\n";
+					load_c[processor] = load_count - 1;
 					//cout << "Number of iterations: " << count;
 					return load_count;
 				}
@@ -433,14 +498,15 @@ void task::gen(float ds)
 	for (int i = 1; i < (int)ds; i++)
 	{
 		float x = 0;
-		while (x < MAX_PERIOD/2)
+		while (x < MAX_PERIOD / 2)
 			x = abs(rand() + 10)*abs(rand() + 10) % MAX_PERIOD + 2;
 
 		float y = x;
-		while ((y / x)*1000 >= chk*1000)
+		while ((y / x) * 1000 >= chk * 1000)
 		{
 			y--;
 		}
+
 		if (y <= 0)
 			y = 1;
 		fout << y << "," << x << "," << endl;
@@ -455,6 +521,14 @@ int main()
 {
 	//task T;
 	//T.debug();
+	cout << "\t\t-------------------------------------------------------------------------" << endl;
+	cout << "\t\t\tRMA Scheduability Analysis in Multiprocessor Environement" << endl;
+	cout << "\t\t\tImproved Time Demand Analysis" << endl;
+	cout << "\t\t\tParallelized using OpenMP" << endl;
+	cout << "\t\t\tDept of Computer Science and Engineering - NITR" << endl;
+	cout << "\t\t-------------------------------------------------------------------------" << endl;
+	cout << endl << "\t\tEnter Task Set size: ";
+	cin >> glb_size;
 	startITDA();
 	cin.ignore();
 	return 0;
